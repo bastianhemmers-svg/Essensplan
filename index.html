@@ -14,9 +14,9 @@ h1{margin:0 0 3px;font-size:28px}.sub{margin:0 0 12px;color:#667085}
 table{width:100%;min-width:720px;border-collapse:separate;border-spacing:5px;table-layout:fixed}
 th,td{border-radius:12px;text-align:center}
 thead th{background:#eaf0f6;padding:10px 4px;font-size:14px;font-weight:750}
-thead th:first-child{width:125px;text-align:left;padding-left:9px}
+thead th:first-child{width:118px;text-align:left;padding-left:9px}
 tbody th{background:#f0f4f8;padding:7px 5px;text-align:left;vertical-align:middle}
-td{position:relative;background:#f7f9fb;height:78px;padding:7px}
+td{position:relative;background:#f7f9fb;height:76px;padding:7px}
 td.augsburg{background:#eaf4ff}
 td.eichstaett{background:#ffdfe1;color:#b42318}
 .dayname{font-weight:750;font-size:14px;margin-bottom:6px}
@@ -27,13 +27,13 @@ td.eichstaett{background:#ffdfe1;color:#b42318}
 .menu-button{position:absolute;right:3px;top:3px;width:22px;height:26px;border:0;background:transparent;font-size:18px;line-height:22px;color:#667085;padding:0}
 .status{text-align:center;font-size:13px;color:#667085;margin-top:12px}
 .note{text-align:center;font-size:12px;color:#667085;margin-top:9px}
+.error{color:#b42318;font-weight:650}
 .popup{position:fixed;z-index:1000;display:none;background:#fff;border:1px solid #d8dee8;border-radius:14px;box-shadow:0 10px 30px #00000025;padding:6px;min-width:165px}
 .popup.show{display:block}
 .popup-title{font-size:12px;color:#667085;padding:5px 9px 6px}
 .popup button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:10px;border-radius:9px;font-size:15px}
 .popup button.selected{background:#eaf4ff;font-weight:700}
 .popup button.eich-selected{background:#ffe5e7;color:#b42318;font-weight:700}
-.error{color:#b42318;font-weight:650}
 @media(max-width:700px){
  .wrap{padding:6px}.card{padding:10px}table{min-width:720px;border-spacing:4px}
  thead th{font-size:13px}.presence{font-size:14px}
@@ -65,9 +65,9 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-
 import {getAuth,signInAnonymously} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {getDatabase,ref,onValue,set} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
 
-/* EXAKT DIE FIREBASE-KONFIGURATION AUS DER BISHER FUNKTIONIERENDEN VERSION */
+// DIREKT AUS DER FIREBASE-CONSOLE ÜBERNOMMEN
 const firebaseConfig={
- apiKey:"AIzaSyDij8UfOCWqqqHIxjMMGRyWhEW6TwB3qI",
+ apiKey:"AIzaSyDij8UfOCWqqqHIxjMMGRrYWhEW6TwB3qI",
  authDomain:"essensplan-hanna-bastian.firebaseapp.com",
  databaseURL:"https://essensplan-hanna-bastian-default-rtdb.europe-west1.firebasedatabase.app",
  projectId:"essensplan-hanna-bastian",
@@ -111,7 +111,6 @@ const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
 const db=getDatabase(app);
 
-/* Tabelle sofort anzeigen – unabhängig davon, ob Firebase schon angemeldet ist */
 function render(){
  document.getElementById("thead").innerHTML=
    "<tr><th>Tag</th>"+people.map(p=>`<th>${p}</th>`).join("")+"</tr>";
@@ -119,7 +118,6 @@ function render(){
  let out="";
  for(const day of days){
    const dayData=data[day]||{};
-
    out+=`<tr>
      <th>
        <div class="dayname">${day}</div>
@@ -163,7 +161,11 @@ function render(){
 
  document.querySelectorAll("[data-cook]").forEach(s=>{
    s.onchange=async()=>{
-     await set(ref(db,`weeks/${key}/${s.dataset.cook}/cook`),s.value);
+     try{
+       await set(ref(db,`weeks/${key}/${s.dataset.cook}/cook`),s.value);
+     }catch(e){
+       showError(e);
+     }
    };
  });
 }
@@ -172,9 +174,15 @@ async function save(day,person,value){
  try{
    await set(ref(db,`weeks/${key}/${day}/${person}`),value);
  }catch(e){
-   document.getElementById("status").innerHTML='<span class="error">Speichern fehlgeschlagen.</span>';
+   showError(e);
    console.error(e);
  }
+}
+
+function showError(e){
+ document.getElementById("status").innerHTML=
+   '<span class="error">Firebase-Fehler: '+(e.code||"unbekannt")+'</span>';
+ console.error(e);
 }
 
 function openPopup(button,day,person){
@@ -225,7 +233,8 @@ document.addEventListener("click",e=>{
  if(!e.target.closest("#popup")&&!e.target.closest("[data-menu]"))closePopup();
 });
 
-/* Tabelle ist bereits sichtbar. Jetzt Firebase verbinden. */
+render();
+
 signInAnonymously(auth).then(()=>{
  document.getElementById("status").textContent="✓ Mit Firebase verbunden";
 
@@ -235,17 +244,14 @@ signInAnonymously(auth).then(()=>{
    document.getElementById("status").textContent="✓ Synchronisiert";
  });
 }).catch(e=>{
- console.error("Firebase-Anmeldung:",e);
  document.getElementById("status").innerHTML=
-   '<span class="error">Firebase-Anmeldung fehlgeschlagen. Die Tabelle ist trotzdem sichtbar. Bitte prüfe in Firebase: Authentication → Anmeldemethode → Anonym → Aktiviert.</span>';
+   '<span class="error">Firebase-Anmeldung fehlgeschlagen: '+(e.code||"unbekannter Fehler")+'</span>';
+ console.error("Firebase-Anmeldung:",e);
 });
 
 setInterval(()=>{
  if(weekKey()!==key)location.reload();
 },60000);
-
-/* Erstes Rendern ohne Firebase */
-render();
 </script>
 </body>
 </html>
