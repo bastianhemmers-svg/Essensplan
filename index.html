@@ -14,9 +14,9 @@ h1{margin:0 0 3px;font-size:28px}.sub{margin:0 0 12px;color:#667085}
 table{width:100%;min-width:720px;border-collapse:separate;border-spacing:5px;table-layout:fixed}
 th,td{border-radius:12px;text-align:center}
 thead th{background:#eaf0f6;padding:10px 4px;font-size:14px;font-weight:750}
-thead th:first-child{width:118px;text-align:left;padding-left:9px}
+thead th:first-child{width:125px;text-align:left;padding-left:9px}
 tbody th{background:#f0f4f8;padding:7px 5px;text-align:left;vertical-align:middle}
-td{position:relative;background:#f7f9fb;height:76px;padding:7px}
+td{position:relative;background:#f7f9fb;height:78px;padding:7px}
 td.augsburg{background:#eaf4ff}
 td.eichstaett{background:#ffdfe1;color:#b42318}
 .dayname{font-weight:750;font-size:14px;margin-bottom:6px}
@@ -33,6 +33,7 @@ td.eichstaett{background:#ffdfe1;color:#b42318}
 .popup button{display:block;width:100%;border:0;background:#fff;text-align:left;padding:10px;border-radius:9px;font-size:15px}
 .popup button.selected{background:#eaf4ff;font-weight:700}
 .popup button.eich-selected{background:#ffe5e7;color:#b42318;font-weight:700}
+.error{color:#b42318;font-weight:650}
 @media(max-width:700px){
  .wrap{padding:6px}.card{padding:10px}table{min-width:720px;border-spacing:4px}
  thead th{font-size:13px}.presence{font-size:14px}
@@ -49,7 +50,7 @@ td.eichstaett{background:#ffdfe1;color:#b42318}
 <tbody id="tbody"></tbody>
 </table>
 </div>
-<div id="status" class="status">Lade Essensplan …</div>
+<div id="status" class="status">Tabelle wird geladen …</div>
 <div class="note">Die Woche wechselt automatisch sonntags um 18:00 Uhr.</div>
 </div></div>
 
@@ -64,6 +65,7 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-
 import {getAuth,signInAnonymously} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {getDatabase,ref,onValue,set} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
 
+/* EXAKT DIE FIREBASE-KONFIGURATION AUS DER BISHER FUNKTIONIERENDEN VERSION */
 const firebaseConfig={
  apiKey:"AIzaSyDij8UfOCWqqqHIxjMMGRyWhEW6TwB3qI",
  authDomain:"essensplan-hanna-bastian.firebaseapp.com",
@@ -78,8 +80,11 @@ const people=["Tanja","Bastian","Hanna","Matthias","Delia"];
 const days=["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
 
 const weekdayLocation={
- Tanja:"Augsburg",Bastian:"Augsburg",Hanna:"Augsburg",
- Matthias:"Eichstätt",Delia:"Eichstätt"
+ Tanja:"Augsburg",
+ Bastian:"Augsburg",
+ Hanna:"Augsburg",
+ Matthias:"Eichstätt",
+ Delia:"Eichstätt"
 };
 
 function weekKey(){
@@ -89,27 +94,46 @@ function weekKey(){
  if(day===0 && now.getHours()>=18)d.setDate(d.getDate()+7);
  return d.toISOString().slice(0,10);
 }
+
 function defaults(person,day){
- return {home:false,location:(day==="Samstag"||day==="Sonntag")?"":weekdayLocation[person]};
+ return {
+   home:false,
+   location:(day==="Samstag"||day==="Sonntag")?"":weekdayLocation[person]
+ };
 }
 
-let key=weekKey(),data={},popupDay=null,popupPerson=null;
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
+let key=weekKey();
+let data={};
+let popupDay=null;
+let popupPerson=null;
 
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getDatabase(app);
+
+/* Tabelle sofort anzeigen – unabhängig davon, ob Firebase schon angemeldet ist */
 function render(){
- document.getElementById("thead").innerHTML="<tr><th>Tag</th>"+people.map(p=>`<th>${p}</th>`).join("")+"</tr>";
+ document.getElementById("thead").innerHTML=
+   "<tr><th>Tag</th>"+people.map(p=>`<th>${p}</th>`).join("")+"</tr>";
+
  let out="";
  for(const day of days){
    const dayData=data[day]||{};
-   out+=`<tr><th><div class="dayname">${day}</div>
-   <label class="cook-label">🍳 Wer kocht?</label>
-   <select class="cook-select" data-cook="${day}">
-    <option value="">– offen –</option>
-    ${people.map(p=>`<option value="${p}" ${dayData.cook===p?"selected":""}>${p}</option>`).join("")}
-   </select></th>`;
+
+   out+=`<tr>
+     <th>
+       <div class="dayname">${day}</div>
+       <label class="cook-label">🍳 Wer kocht?</label>
+       <select class="cook-select" data-cook="${day}">
+         <option value="">– offen –</option>
+         ${people.map(p=>`<option value="${p}" ${dayData.cook===p?"selected":""}>${p}</option>`).join("")}
+       </select>
+     </th>`;
+
    for(const person of people){
      const p={...defaults(person,day),...(dayData[person]||{})};
      const cls=p.location==="Eichstätt"?"eichstaett":p.location==="Augsburg"?"augsburg":"";
+
      out+=`<td class="${cls}">
        <button class="presence ${p.home?"":"notthere"}" data-home="${day}|${person}">
          ${p.home?"✓":"–"}
@@ -121,59 +145,107 @@ function render(){
  }
  document.getElementById("tbody").innerHTML=out;
 
- document.querySelectorAll("[data-home]").forEach(b=>b.onclick=async()=>{
-   const [day,person]=b.dataset.home.split("|");
-   const old={...defaults(person,day),...(data[day]?.[person]||{})};
-   await save(day,person,{...old,home:!old.home});
+ document.querySelectorAll("[data-home]").forEach(b=>{
+   b.onclick=async()=>{
+     const [day,person]=b.dataset.home.split("|");
+     const old={...defaults(person,day),...(data[day]?.[person]||{})};
+     await save(day,person,{...old,home:!old.home});
+   };
  });
- document.querySelectorAll("[data-menu]").forEach(b=>b.onclick=e=>{
-   e.stopPropagation();
-   const [day,person]=b.dataset.menu.split("|");
-   openPopup(b,day,person);
+
+ document.querySelectorAll("[data-menu]").forEach(b=>{
+   b.onclick=e=>{
+     e.stopPropagation();
+     const [day,person]=b.dataset.menu.split("|");
+     openPopup(b,day,person);
+   };
  });
- document.querySelectorAll("[data-cook]").forEach(s=>s.onchange=async()=>{
-   await set(ref(db,`weeks/${key}/${s.dataset.cook}/cook`),s.value);
+
+ document.querySelectorAll("[data-cook]").forEach(s=>{
+   s.onchange=async()=>{
+     await set(ref(db,`weeks/${key}/${s.dataset.cook}/cook`),s.value);
+   };
  });
 }
 
 async function save(day,person,value){
- try{await set(ref(db,`weeks/${key}/${day}/${person}`),value)}
- catch(e){document.getElementById("status").textContent="Speichern fehlgeschlagen.";console.error(e)}
+ try{
+   await set(ref(db,`weeks/${key}/${day}/${person}`),value);
+ }catch(e){
+   document.getElementById("status").innerHTML='<span class="error">Speichern fehlgeschlagen.</span>';
+   console.error(e);
+ }
 }
 
 function openPopup(button,day,person){
- popupDay=day;popupPerson=person;
+ popupDay=day;
+ popupPerson=person;
+
  const p={...defaults(person,day),...(data[day]?.[person]||{})};
  const popup=document.getElementById("popup");
+
  popup.querySelectorAll("[data-location]").forEach(b=>{
    b.classList.remove("selected","eich-selected");
-   if(b.dataset.location===p.location)b.classList.add(p.location==="Eichstätt"?"eich-selected":"selected");
+   if(b.dataset.location===p.location){
+     b.classList.add(p.location==="Eichstätt"?"eich-selected":"selected");
+   }
  });
+
  const r=button.getBoundingClientRect();
  popup.style.left=Math.min(window.innerWidth-180,Math.max(8,r.right-175))+"px";
  popup.style.top=Math.min(window.innerHeight-125,r.bottom+5)+"px";
  popup.classList.add("show");
 }
 
-document.querySelectorAll("#popup [data-location]").forEach(b=>b.onclick=async()=>{
- if(!popupDay||!popupPerson)return;
- const old={...defaults(popupPerson,popupDay),...(data[popupDay]?.[popupPerson]||{})};
- await save(popupDay,popupPerson,{...old,location:b.dataset.location});
- closePopup();
+document.querySelectorAll("#popup [data-location]").forEach(b=>{
+ b.onclick=async()=>{
+   if(!popupDay||!popupPerson)return;
+
+   const old={
+     ...defaults(popupPerson,popupDay),
+     ...(data[popupDay]?.[popupPerson]||{})
+   };
+
+   await save(popupDay,popupPerson,{
+     ...old,
+     location:b.dataset.location
+   });
+
+   closePopup();
+ };
 });
-function closePopup(){document.getElementById("popup").classList.remove("show");popupDay=null;popupPerson=null}
+
+function closePopup(){
+ document.getElementById("popup").classList.remove("show");
+ popupDay=null;
+ popupPerson=null;
+}
+
 document.addEventListener("click",e=>{
  if(!e.target.closest("#popup")&&!e.target.closest("[data-menu]"))closePopup();
 });
 
+/* Tabelle ist bereits sichtbar. Jetzt Firebase verbinden. */
 signInAnonymously(auth).then(()=>{
+ document.getElementById("status").textContent="✓ Mit Firebase verbunden";
+
  onValue(ref(db,`weeks/${key}`),snap=>{
-   data=snap.val()||{};render();
+   data=snap.val()||{};
+   render();
    document.getElementById("status").textContent="✓ Synchronisiert";
  });
-}).catch(e=>{document.getElementById("status").textContent="Firebase-Anmeldung fehlgeschlagen.";console.error(e)});
+}).catch(e=>{
+ console.error("Firebase-Anmeldung:",e);
+ document.getElementById("status").innerHTML=
+   '<span class="error">Firebase-Anmeldung fehlgeschlagen. Die Tabelle ist trotzdem sichtbar. Bitte prüfe in Firebase: Authentication → Anmeldemethode → Anonym → Aktiviert.</span>';
+});
 
-setInterval(()=>{if(weekKey()!==key)location.reload()},60000);
+setInterval(()=>{
+ if(weekKey()!==key)location.reload();
+},60000);
+
+/* Erstes Rendern ohne Firebase */
+render();
 </script>
 </body>
 </html>
